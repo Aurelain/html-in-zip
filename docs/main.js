@@ -3,48 +3,88 @@
  */
 const main = async () => {
     await startServiceWorker();
+
+    // Method 4:
     if (location.search) {
         await load(location.search.substring(1));
         return;
     }
-    document.addEventListener('dragover', onDocumentDragOver);
-    document.addEventListener('dragleave', onDocumentDragLeave);
-    document.addEventListener('drop', onDocumentDrop);
+
+    // Method 1:
+    window.addEventListener('dragover', (event) => event.preventDefault());
+    window.addEventListener('drop', onWindowDrop);
+
+    // Method 2:
+    window.addEventListener('paste', onWindowPaste);
+
+    // Method 3:
+    const inputElement = document.getElementById('input');
+    inputElement.addEventListener('change', onInputChange);
+    inputElement.addEventListener('cancel', () => 0);
+
+    // Method 5:
+    window.addEventListener('message', onWindowMessage);
 };
 
 /**
  *
  */
-const onDocumentDragOver = (event) => {
-    console.log('onDocumentDragOver:', event);
-
+const onWindowDrop = (event) => {
+    event.preventDefault();
+    const {dataTransfer} = event;
+    const text = dataTransfer.getData('text/plain');
+    if (text) {
+        load(text);
+    } else {
+        const [file] = dataTransfer.files;
+        load(file);
+    }
 };
 
 /**
  *
  */
-const onDocumentDragLeave = (event) => {
-    console.log('onDocumentDragLeave:', event);
-
+const onWindowPaste = (event) => {
+    const {clipboardData} = event;
+    const text = clipboardData.getData('text/plain');
+    if (text) {
+        load(text);
+    } else {
+        const [file] = clipboardData.files;
+        load(file);
+    }
 };
 
 /**
  *
  */
-const onDocumentDrop = (event) => {
-    console.log('onDocumentDrop:', event);
-
+const onWindowMessage = (event) => {
+    const {data = {}} = event;
+    if (data.payload) {
+        load(data.payload);
+    }
 };
 
 /**
  *
  */
-const load = async (url) => {
-    const response = await fetch(url);
+const onInputChange = (event) => {
+    load(event.currentTarget.files[0]);
+};
+
+/**
+ *
+ */
+const load = async (blob) => {
+    if (typeof blob === 'string') {
+        const response = await fetch(blob);
+        blob = await response.blob();
+    }
+
     navigator.serviceWorker.addEventListener('message', onMessageFromSW);
     navigator.serviceWorker.controller.postMessage({
-         type: 'RECEIVE_BLOB',
-         blob: await response.blob(),
+        type: 'RECEIVE_BLOB',
+        blob,
     });
 };
 
