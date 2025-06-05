@@ -7,14 +7,21 @@
         <title>html-in-zip</title>
         <style>
             html, body {
-                margin:0;
+                margin: 0;
                 width: 100%;
                 height: 100%;
                 overflow: hidden;
+                font-family: sans-serif;
+            }
+
+            #card {
+                padding: 10px;
+                display: table;
+                margin: 0 auto;
             }
 
             iframe {
-                border:0;
+                border: 0;
                 width: 100%;
                 height: 100%;
             }
@@ -22,5 +29,18 @@
         <script src='main.js'></script>
     </head>
     <body>
+        <div id='card'>
+            <h1>View a webpage inside a zip</h1>
+            Upload a zip file through one of the following methods:
+            <ul>
+                <li>Drag-and-drop a zip or an url</li>
+                <li>Ctrl+V a zip or an url</li>
+                <li>Browse for a zip:
+                    <button>Browse...</button>
+                </li>
+                <li>Append "?your_url" to the address-bar</li>
+                <li>Use `postMessage` to send a `payload` (blob or url) to this iframe</li>
+            </ul>
+        </div>
     </body>
 </html>

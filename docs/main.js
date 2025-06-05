@@ -5,7 +5,35 @@ const main = async () => {
     await startServiceWorker();
     if (location.search) {
         await load(location.search.substring(1));
+        return;
     }
+    document.addEventListener('dragover', onDocumentDragOver);
+    document.addEventListener('dragleave', onDocumentDragLeave);
+    document.addEventListener('drop', onDocumentDrop);
+};
+
+/**
+ *
+ */
+const onDocumentDragOver = (event) => {
+    console.log('onDocumentDragOver:', event);
+
+};
+
+/**
+ *
+ */
+const onDocumentDragLeave = (event) => {
+    console.log('onDocumentDragLeave:', event);
+
+};
+
+/**
+ *
+ */
+const onDocumentDrop = (event) => {
+    console.log('onDocumentDrop:', event);
+
 };
 
 /**

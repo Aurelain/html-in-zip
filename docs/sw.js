@@ -49,7 +49,7 @@ const run = () => {
  *
  */
 const onInstall = (event) => {
-    // console.log('onInstall:');
+    // console.log('onInstall');
     event.waitUntil(self.skipWaiting());
 }
 
@@ -57,7 +57,7 @@ const onInstall = (event) => {
  *
  */
 const onActivate = (event) => {
-    // console.log('onActivate:');
+    // console.log('onActivate');
     event.waitUntil(self.clients.claim());
 }
 
@@ -77,7 +77,6 @@ const onMessageFromClient = async (event) => {
     const zipBlob = event.data.blob;
     const zip = await JSZip.loadAsync(zipBlob);
     mapClientToZip.set(source.id, zip);
-    console.log('source.id:', source.id);
 
     // Announce the entry path:
     const htmlPath = source.id + '/' + chooseHtmlPath(zip);
@@ -134,7 +133,7 @@ const onFetch = (event) => {
     }
 
     parts.shift();
-    const pathInZip = parts.join('/').trim() || 'index.html'; // e.g. index.html
+    const pathInZip = cleanPath(parts.join('/').trim());
     // console.log('pathInZip:', pathInZip);
 
     // noinspection JSVoidFunctionReturnValueUsed
@@ -145,6 +144,17 @@ const onFetch = (event) => {
         event.respondWith(new Response(`Not found`, { status: 404 }));
     }
 };
+
+/**
+ *
+ */
+const cleanPath = (filePath) => {
+    if (!filePath) {
+        return 'index.html';
+    }
+    return filePath.replace(/[?#].*/, '');
+}
+
 
 /**
  *
