@@ -10,6 +10,11 @@ const main = async () => {
         return;
     }
 
+    // Announce to anyone trying to use Method 5 that we are ready to provide them with service:
+    if (window.top !== window.self) {
+        window.parent.postMessage('READY', '*');
+    }
+
     // Method 1:
     window.addEventListener('dragover', (event) => event.preventDefault());
     window.addEventListener('drop', onWindowDrop);
@@ -96,10 +101,16 @@ const onMessageFromSW = (event) => {
     if (data.type !== 'RECEIVE_HTML_PATH') {
         return;
     }
-    document.body.innerHTML = `
-        <iframe src='${data.htmlPath}' allowfullscreen></iframe>
-    `;
 
+    // Render the zip:
+    document.body.innerHTML = `<iframe src='${data.htmlPath}' allowfullscreen></iframe>`;
+
+    // Announce to anyone trying to use Method 5 that we have rendered the zip:
+    if (window.top !== window.self) {
+        document.querySelector('iframe').addEventListener('load', () => {
+            window.parent.postMessage('DONE', '*');
+        });
+    }
 };
 
 /**
@@ -117,7 +128,7 @@ const startServiceWorker = async () => {
                     sw.removeEventListener('statechange', onStateChange);
                     resolve();
                 }
-            }
+            };
             sw.addEventListener('statechange', onStateChange);
         });
     }
