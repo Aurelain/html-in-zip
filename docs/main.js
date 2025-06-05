@@ -96,7 +96,6 @@ const onMessageFromSW = (event) => {
     if (data.type !== 'RECEIVE_HTML_PATH') {
         return;
     }
-    console.log(`onMessageFromSW @ ${location.search}:`, data);
     document.body.innerHTML = `
         <iframe src='${data.htmlPath}' allowfullscreen></iframe>
     `;

@@ -79,15 +79,19 @@ const onMessageFromClient = async (event) => {
     mapClientToZip.set(source.id, zip);
 
     // Announce the entry path:
-    const htmlPath = source.id + '/' + chooseHtmlPath(zip);
-    source.postMessage({type: 'RECEIVE_HTML_PATH', htmlPath});
+    const htmlPath = chooseHtmlPath(zip);
+    if (htmlPath) {
+        source.postMessage({type: 'RECEIVE_HTML_PATH', htmlPath: source.id + '/' + htmlPath});
+    } else {
+        console.error('No html found in zip!');
+    }
 }
 
 /**
  *
  */
 const pruneMap = async () => {
-    const aliveClients = await self.clients.matchAll({ includeUncontrolled: true });
+    const aliveClients = await self.clients.matchAll({includeUncontrolled: true});
     const aliveIds = new Set(aliveClients.map(c => c.id));
     for (const clientId of mapClientToZip.keys()) {
         if (!aliveIds.has(clientId)) {
@@ -100,18 +104,18 @@ const pruneMap = async () => {
  *
  */
 const chooseHtmlPath = (zip) => {
-    const htmlPaths = [];
-    zip.forEach((relativePath, file) => {
+    let topmostPath = null;
+    let minDepth = Infinity;
+    for (const [relativePath, file] of Object.entries(zip.files)) {
         if (!file.dir && relativePath.toLowerCase().endsWith('.html')) {
-            htmlPaths.push(relativePath);
-        }
-    });
-    for (const path of htmlPaths) {
-        if (path === 'index.html' || path.endsWith('/index.html')) {
-            return path;
+            const depth = relativePath.split('/').length;
+            if (depth < minDepth) {
+                minDepth = depth;
+                topmostPath = relativePath;
+            }
         }
     }
-    return htmlPaths[0];
+    return topmostPath;
 }
 
 /**
@@ -141,7 +145,7 @@ const onFetch = (event) => {
     if (zipEntry) {
         event.respondWith(respondWithZipEntry(zipEntry));
     } else {
-        event.respondWith(new Response(`Not found`, { status: 404 }));
+        event.respondWith(new Response(`Not found`, {status: 404}));
     }
 };
 
@@ -168,7 +172,7 @@ const respondWithZipEntry = async (zipEntry) => {
             }
         });
     } catch (err) {
-        return new Response(`Error reading`, { status: 404 });
+        return new Response(`Error reading`, {status: 404});
     }
 }
 
