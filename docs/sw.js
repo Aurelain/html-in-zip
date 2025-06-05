@@ -1,120 +1,173 @@
-// Import JSZip (assuming jszip.min.js is in the same directory or accessible)
-self.importScripts('./jszip.min.js'); // Adjust path if necessary
+/*
+{
+    288a4e95-7c10-41bd-ad04-b04dec86730a: <zip>,
+    ...
+}
+ */
+const mapClientToZip = new Map();
 
-let zipFs = null; // This will hold the JSZip instance
-const VFS_PREFIX = './vfs/'; // Requests starting with this will be served from ZIP
+const EXTENSION_TO_MIME = {
+    'html': 'text/html',
+    'htm': 'text/html',
+    'css': 'text/css',
+    'js': 'application/javascript',
+    'json': 'application/json',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'svg': 'image/svg+xml',
+    'ico': 'image/x-icon',
+    'webp': 'image/webp',
+    'woff': 'font/woff',
+    'woff2': 'font/woff2',
+    'ttf': 'font/ttf',
+    'otf': 'font/otf',
+    'mp4': 'video/mp4',
+    'webm': 'video/webm',
+    'mp3': 'audio/mpeg',
+    'ogg': 'audio/ogg',
+    'txt': 'text/plain',
+    'xml': 'application/xml',
+    'pdf': 'application/pdf',
+    'zip': 'application/zip',
+};
 
-console.log('Service Worker loading...');
 
-self.addEventListener('install', event => {
-    console.log('Service Worker installing...');
-    // Force the waiting service worker to become the active service worker.
+/**
+ *
+ */
+const run = () => {
+    self.importScripts('./jszip.min.js');
+    self.addEventListener('install', onInstall);
+    self.addEventListener('activate', onActivate);
+    self.addEventListener('message', onMessageFromClient);
+    self.addEventListener('fetch', onFetch);
+}
+
+/**
+ *
+ */
+const onInstall = (event) => {
+    // console.log('onInstall:');
     event.waitUntil(self.skipWaiting());
-});
+}
 
-self.addEventListener('activate', event => {
-    console.log('Service Worker activating...');
-    // Take control of all clients as soon as the SW is activated.
+/**
+ *
+ */
+const onActivate = (event) => {
+    // console.log('onActivate:');
     event.waitUntil(self.clients.claim());
-    console.log('Service Worker activated and claimed clients.');
-});
+}
 
-self.addEventListener('message', event => {
-    if (event.data && event.data.type === 'INIT_VFS') {
-        console.log('Service Worker received INIT_VFS message with blob.');
-        const zipBlob = event.data.blob;
-        JSZip.loadAsync(zipBlob)
-            .then(zip => {
-                zipFs = zip;
-                console.log('ZIP file loaded and ready in Service Worker.');
-                console.log('zipFs in load:', zipFs);
-                // Optionally, notify clients that VFS is ready
-                self.clients.matchAll().then(clients => {
-                    clients.forEach(client => client.postMessage({ type: 'VFS_READY' }));
-                });
-            })
-            .catch(err => {
-                console.error('Failed to load ZIP file in Service Worker:', err);
-                zipFs = null;
-            });
+/**
+ *
+ */
+const onMessageFromClient = async (event) => {
+    const {source, data = {}} = event;
+    if (data.type !== 'RECEIVE_BLOB') {
+        return;
     }
-});
 
-self.addEventListener('fetch', event => {
-    const url = new URL(event.request.url);
-    console.log('event.request.url:', event.request.url);
+    // Remove stale clients:
+    await pruneMap();
 
-    // Check if the request URL starts with our VFS_PREFIX relative to the SW scope
-    // The SW's scope is './', so event.request.url will be like 'http://localhost:xxxx/vfs/file.txt'
-    // We need to compare the pathname part.
-    console.log('url.pathname:', url.pathname);
-    console.log('self.registration.scope:', self.registration.scope);
-    console.log('VFS_PREFIX:', VFS_PREFIX);
-    if (url.pathname.includes('/vfs/')) {
-        console.log('zipFs in fetch:', zipFs);
-        if (!zipFs) {
-            console.warn('Fetch event for VFS, but ZIP not loaded yet. Request URL:', event.request.url);
-            // Respond with a 503 Service Unavailable or a temporary message
-            event.respondWith(
-                new Response('Virtual File System not ready. Please wait or refresh.', {
-                    status: 503,
-                    statusText: 'Service Unavailable',
-                    headers: { 'Content-Type': 'text/plain' }
-                })
-            );
-            return;
+    // Parse the blob and store it:
+    const zipBlob = event.data.blob;
+    const zip = await JSZip.loadAsync(zipBlob);
+    mapClientToZip.set(source.id, zip);
+    console.log('source.id:', source.id);
+
+    // Announce the entry path:
+    const htmlPath = source.id + '/' + chooseHtmlPath(zip);
+    source.postMessage({type: 'RECEIVE_HTML_PATH', htmlPath});
+}
+
+/**
+ *
+ */
+const pruneMap = async () => {
+    const aliveClients = await self.clients.matchAll({ includeUncontrolled: true });
+    const aliveIds = new Set(aliveClients.map(c => c.id));
+    for (const clientId of mapClientToZip.keys()) {
+        if (!aliveIds.has(clientId)) {
+            mapClientToZip.delete(clientId);
         }
-
-        // Extract the path within the ZIP
-        const pathInZip = 'image.svg';
-        console.log(`Service Worker intercepting: ${event.request.url}, Path in ZIP: '${pathInZip}'`);
-
-        const zipEntry = zipFs.file(pathInZip);
-
-        if (zipEntry) {
-            console.log(`Found in ZIP: ${pathInZip}`);
-            event.respondWith(
-                zipEntry.async('blob') // Or 'string', 'arraybuffer', 'nodebuffer'
-                    .then(contentBlob => {
-                        const mimeType = getMimeType(pathInZip);
-                        console.log(`Serving ${pathInZip} with MIME type ${mimeType}`);
-                        return new Response(contentBlob, {
-                            headers: {
-                                'Content-Type': mimeType,
-                                // Add any other headers like Content-Length if known and needed
-                                // 'Content-Length': contentBlob.size // Example
-                            }
-                        });
-                    })
-                    .catch(err => {
-                        console.error(`Error reading ${pathInZip} from ZIP:`, err);
-                        return new Response(`File not found or error reading: ${pathInZip}`, { status: 404 });
-                    })
-            );
-        } else {
-            console.warn(`File not found in ZIP: ${pathInZip}`);
-            event.respondWith(new Response(`File not found in VFS: ${pathInZip}`, { status: 404 }));
-        }
-    } else {
-        // Not a VFS request, let the browser handle it normally
-        console.log('Service Worker passing through:', event.request.url);
-        // No event.respondWith() means default browser behavior
-    }
-});
-
-function getMimeType(filePath) {
-    const extension = filePath.split('.').pop().toLowerCase();
-    switch (extension) {
-        case 'txt': return 'text/plain';
-        case 'html': return 'text/html';
-        case 'css': return 'text/css';
-        case 'js': return 'application/javascript';
-        case 'json': return 'application/json';
-        case 'png': return 'image/png';
-        case 'jpg':
-        case 'jpeg': return 'image/jpeg';
-        case 'gif': return 'image/gif';
-        case 'svg': return 'image/svg+xml';
-        default: return 'application/octet-stream';
     }
 }
+
+/**
+ *
+ */
+const chooseHtmlPath = (zip) => {
+    const htmlPaths = [];
+    zip.forEach((relativePath, file) => {
+        if (!file.dir && relativePath.toLowerCase().endsWith('.html')) {
+            htmlPaths.push(relativePath);
+        }
+    });
+    for (const path of htmlPaths) {
+        if (path === 'index.html' || path.endsWith('/index.html')) {
+            return path;
+        }
+    }
+    return htmlPaths[0];
+}
+
+/**
+ *
+ */
+const onFetch = (event) => {
+    const {url} = event.request; // e.g. http://localhost:8000/269508e5-f9b6-47ae-b803-f7bbb8c8771e/index.html
+    const {scope} = self.registration; // e.g. http://localhost:8000/
+    if (!url.startsWith(scope)) {
+        return;
+    }
+
+    const relativeUrl = url.substring(scope.length); // e.g. 269508e5-f9b6-47ae-b803-f7bbb8c8771e/index.html
+    const parts = relativeUrl.split('/');
+    const clientId = parts[0]; // e.g. 269508e5-f9b6-47ae-b803-f7bbb8c8771e
+    const zip = mapClientToZip.get(clientId);
+    if (!zip) {
+        return;
+    }
+
+    parts.shift();
+    const pathInZip = parts.join('/').trim() || 'index.html'; // e.g. index.html
+    // console.log('pathInZip:', pathInZip);
+
+    // noinspection JSVoidFunctionReturnValueUsed
+    const zipEntry = zip.file(pathInZip);
+    if (zipEntry) {
+        event.respondWith(respondWithZipEntry(zipEntry));
+    } else {
+        event.respondWith(new Response(`Not found`, { status: 404 }));
+    }
+};
+
+/**
+ *
+ */
+const respondWithZipEntry = async (zipEntry) => {
+    try {
+        const contentBlob = await zipEntry.async('blob');
+        return new Response(contentBlob, {
+            headers: {
+                'Content-Type': getMimeType(zipEntry.name)
+            }
+        });
+    } catch (err) {
+        return new Response(`Error reading`, { status: 404 });
+    }
+}
+
+/**
+ *
+ */
+const getMimeType = (filePath) => {
+    const extension = filePath.split('.').pop().toLowerCase();
+    return EXTENSION_TO_MIME[extension] || 'application/octet-stream';
+}
+
+run();
