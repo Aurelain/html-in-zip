@@ -105,7 +105,9 @@ const pruneMap = async () => {
  */
 const chooseHtmlPath = (zip) => {
     let topmostPath = null;
+    let topmostPathIndex = null;
     let minDepth = Infinity;
+    let minDepthIndex = Infinity;
     for (const [relativePath, file] of Object.entries(zip.files)) {
         if (!file.dir && relativePath.toLowerCase().endsWith('.html')) {
             const depth = relativePath.split('/').length;
@@ -113,9 +115,16 @@ const chooseHtmlPath = (zip) => {
                 minDepth = depth;
                 topmostPath = relativePath;
             }
+            const fileName = relativePath.split('/').pop();
+            if (fileName.startsWith('index.')) {
+                if (depth < minDepthIndex) {
+                    minDepthIndex = depth;
+                    topmostPathIndex = relativePath;
+                }
+            }
         }
     }
-    return topmostPath;
+    return topmostPathIndex || topmostPath;
 }
 
 /**
